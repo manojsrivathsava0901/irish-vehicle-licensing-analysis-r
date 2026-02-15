@@ -1,0 +1,323 @@
+---
+title: "Final Assignment R"
+author: "Manoj Srivathsava"
+format:
+  pdf:
+    code-overflow: wrap         # Automatically wrap long code lines
+    code-block-font-size: 0.9em
+    geometry: "margin=1in"     # Set 1-inch margins
+    include-in-header:
+      text: |
+        % Allow line breaks in the code/highlighting environment
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
+editor: visual
+date: "`r Sys.Date()`"
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+# Introduction
+
+This project analyses vehicle licensing data in Ireland using techniques covered in the *Data Programming with R* module.\
+The dataset contains a mix of categorical and numerical variables, making it suitable for data cleaning, exploratory analysis, functional programming, and custom function development.
+
+------------------------------------------------------------------------
+
+# Part 1: Data Analysis
+
+## 1. Libraries
+
+```{r message=FALSE, warning=FALSE}
+# Core packages for data manipulation and visualisation
+library(tidyverse)
+library(ggplot2)
+
+# Packages for data cleaning and summaries
+library(janitor)
+library(skimr)
+library(knitr)
+
+# Functional programming
+library(purrr)
+```
+
+These libraries support efficient data handling, clear visualisation, and reproducible analysis.
+
+------------------------------------------------------------------------
+
+## 2. Data Loading
+
+```{r}
+# Load the dataset
+data <- read.csv("DOTA04.20251216T121242.csv")
+
+# Check dataset dimensions
+dim(data)
+```
+
+The dataset contains **3,240 observations and 8 variables**, providing sufficient scope for meaningful exploratory analysis.
+
+------------------------------------------------------------------------
+
+## 3. Data Preprocessing
+
+```{r}
+# Convert relevant variables to appropriate types and remove missing values
+data_clean <- data |>
+  mutate(
+    Statistic.Label = as.factor(Statistic.Label),
+    Fuel.Type = as.factor(Fuel.Type),
+    Type.of.Carriage = as.factor(Type.of.Carriage),
+    Licensing.Authority = as.factor(Licensing.Authority),
+    Gross.Vehicle.Weight = as.factor(Gross.Vehicle.Weight),
+    Year = as.integer(Year)
+  ) |>
+  filter(!is.na(VALUE))
+```
+
+Categorical variables are converted to factors, and missing values in the response variable are removed to ensure reliable summaries and plots.
+
+------------------------------------------------------------------------
+
+## 4. Numerical Summaries
+
+```{r}
+# Summary statistics by fuel type
+fuel_summary <- data_clean |>
+  group_by(Fuel.Type) |>
+  summarise(
+    mean_value = mean(VALUE),
+    median_value = median(VALUE),
+    total_value = sum(VALUE),
+    .groups = "drop"
+  )
+
+# Summary by licensing authority
+authority_summary <- data_clean |>
+  group_by(Licensing.Authority) |>
+  summarise(
+    total_value = sum(VALUE),
+    .groups = "drop"
+  )
+
+fuel_summary
+authority_summary
+```
+
+These summaries highlight differences in vehicle counts across fuel types and regions.
+
+------------------------------------------------------------------------
+
+## 5. Visual Exploration
+
+### 5.1 Vehicles by Licensing Authority
+
+```{r}
+ggplot(authority_summary,
+       aes(x = reorder(Licensing.Authority, total_value), y = total_value)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Total Vehicles by Licensing Authority",
+    x = "Licensing Authority",
+    y = "Total Vehicles"
+  ) +
+  theme_minimal()
+```
+
+This plot reveals substantial regional variation in vehicle registrations.
+
+------------------------------------------------------------------------
+
+### 5.2 Distribution by Fuel Type
+
+```{r}
+ggplot(data_clean, aes(x = Fuel.Type, y = VALUE)) +
+  geom_boxplot(fill = "lightblue", color = "darkblue") +
+  labs(
+    title = "Distribution of Vehicle Counts by Fuel Type",
+    x = "Fuel Type",
+    y = "Vehicle Count"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The boxplot shows differences in spread and the presence of outliers across fuel types.
+
+------------------------------------------------------------------------
+
+### 5.3 Trend Over Time (Diesel Vehicles)
+
+```{r}
+ggplot(
+  data_clean |> filter(Fuel.Type == "Diesel"),
+  aes(x = Year, y = VALUE)
+) +
+  stat_summary(fun = sum, geom = "line", linewidth = 1, color = "steelblue") +
+  labs(
+    title = "Trend in Diesel Vehicle Counts Over Time",
+    x = "Year",
+    y = "Total Vehicles"
+  ) +
+  theme_minimal()
+```
+
+This line plot highlights changes in diesel vehicle registrations over time.
+
+------------------------------------------------------------------------
+
+### 5.4 Fuel Composition by Region
+
+```{r}
+ggplot(data_clean, aes(x = Licensing.Authority, y = VALUE, fill = Fuel.Type)) +
+  stat_summary(fun = sum, geom = "bar", position = "stack") +
+  labs(
+    title = "Fuel Type Composition by Licensing Authority",
+    x = "Licensing Authority",
+    y = "Total Vehicles"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 6))
+```
+
+This stacked bar chart shows how fuel types contribute to total registrations within each region.
+
+------------------------------------------------------------------------
+
+## 6. Functional Programming with purrr
+
+```{r}
+# Split data by licensing authority
+authority_list <- split(data_clean, data_clean$Licensing.Authority)
+
+# Apply the same summary function to each subset
+authority_purrr_summary <- map_dfr(
+  authority_list,
+  ~ summarise(.x,
+              mean_value = mean(VALUE),
+              total_value = sum(VALUE)),
+  .id = "Licensing.Authority"
+)
+
+authority_purrr_summary
+```
+
+Using `purrr::map_dfr()` allows the same operation to be applied consistently across groups.
+
+------------------------------------------------------------------------
+
+# Part 2: R Package Demonstration
+
+```{r}
+# Clean column names
+clean_data <- data |>
+  clean_names()
+
+# Frequency table by fuel type
+fuel_table <- clean_data |>
+  tabyl(fuel_type)
+
+fuel_table |>
+  adorn_totals("row") |>
+  adorn_percentages("col") |>
+  adorn_pct_formatting()
+
+# Package citation
+citation("janitor")
+```
+
+The `janitor` package simplifies data cleaning and produces clear, publication-ready tables.
+
+------------------------------------------------------------------------
+
+# Part 3: Functions and Programming
+
+## 1. Custom Analysis Function
+
+```{r}
+vehicle_group_analysis <- function(data, group_var, value_var) {
+
+  # Remove missing values
+  clean_data <- data[!is.na(data[[value_var]]), ]
+
+  # Compute group-wise statistics
+  stats <- tapply(
+    clean_data[[value_var]],
+    clean_data[[group_var]],
+    function(x) {
+      c(
+        mean = mean(x),
+        median = median(x),
+        sd = sd(x),
+        n = length(x)
+      )
+    }
+  )
+
+  # Create S3 object
+  output <- list(
+    statistics = as.data.frame(do.call(rbind, stats)),
+    group_var = group_var,
+    value_var = value_var
+  )
+
+  class(output) <- "vehicle_analysis"
+  output
+}
+```
+
+------------------------------------------------------------------------
+
+## 2. S3 Methods
+
+```{r}
+print.vehicle_analysis <- function(x, ...) {
+  cat("Vehicle Group Analysis Object\n")
+  cat("Grouping variable:", x$group_var, "\n")
+  cat("Value variable:", x$value_var, "\n")
+  cat("Number of groups:", nrow(x$statistics), "\n")
+}
+
+summary.vehicle_analysis <- function(object, ...) {
+  cat("Detailed Group-wise Statistics\n\n")
+  print(round(object$statistics, 2))
+}
+
+plot.vehicle_analysis <- function(x, ...) {
+  barplot(
+    x$statistics$mean,
+    names.arg = rownames(x$statistics),
+    col = "steelblue",
+    las = 2,
+    main = paste("Mean", x$value_var, "by", x$group_var),
+    ylab = paste("Mean", x$value_var)
+  )
+}
+```
+
+------------------------------------------------------------------------
+
+## 3. Example Usage
+
+```{r}
+vehicle_result <- vehicle_group_analysis(
+  data = data,
+  group_var = "Fuel.Type",
+  value_var = "VALUE"
+)
+
+print(vehicle_result)
+summary(vehicle_result)
+plot(vehicle_result)
+```
+
+------------------------------------------------------------------------
+
+# Conclusion
+
+This project demonstrates the application of data cleaning, exploratory analysis, functional programming, and custom S3 classes in R.\
+The results provide insight into vehicle registration patterns across fuel types and regions while showcasing reusable and well-documented code.
